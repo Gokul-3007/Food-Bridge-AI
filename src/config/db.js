@@ -1,7 +1,13 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 
 let mongoMemoryServer = null;
+
+// Loaded lazily: mongodb-memory-server is a local-dev fallback only and is not
+// installed in production (e.g. the Netlify Function bundle).
+const createMemoryServer = async (options) => {
+  const { MongoMemoryServer } = await import('mongodb-memory-server');
+  return MongoMemoryServer.create(options);
+};
 
 export const connectDB = async () => {
   try {
@@ -15,7 +21,7 @@ export const connectDB = async () => {
     }
 
     console.log('No MONGODB_URI found. Initializing MongoMemoryServer for resilient zero-config setup...');
-    mongoMemoryServer = await MongoMemoryServer.create({
+    mongoMemoryServer = await createMemoryServer({
       instance: {
         dbName: 'foodbridge_ai'
       }
@@ -29,7 +35,7 @@ export const connectDB = async () => {
     if (!mongoMemoryServer) {
       try {
         console.log('Falling back to MongoMemoryServer...');
-        mongoMemoryServer = await MongoMemoryServer.create();
+        mongoMemoryServer = await createMemoryServer();
         const fallbackUri = mongoMemoryServer.getUri();
         await mongoose.connect(fallbackUri);
         console.log(`Fallback in-memory MongoDB connected: ${fallbackUri}`);
