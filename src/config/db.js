@@ -4,53 +4,47 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 let mongoMemoryServer = null;
 
 export const connectDB = async () => {
-  try {
-    let mongoUri = process.env.MONGODB_URI;
+    const mongoUri = process.env.MONGODB_URI?.trim();
 
-    if (mongoUri && mongoUri.trim().length > 0) {
-      console.log('Connecting to provided MONGODB_URI...');
-      await mongoose.connect(mongoUri);
-      console.log('MongoDB connected successfully via MONGODB_URI');
-      return;
+    if (process.env.NODE_ENV === 'production' && !mongoUri) {
+          throw new Error('MONGODB_URI is required in production.');
     }
 
-    console.log('No MONGODB_URI found. Initializing MongoMemoryServer for resilient zero-config setup...');
-    mongoMemoryServer = await MongoMemoryServer.create({
-      instance: {
-        dbName: 'foodbridge_ai'
-      }
-    });
-    mongoUri = mongoMemoryServer.getUri();
-    await mongoose.connect(mongoUri);
-    console.log(`Connected to in-memory MongoDB at: ${mongoUri}`);
-  } catch (error) {
-    console.error(`MongoDB connection error: ${error.message}`);
-    // If external URI failed, try fallback to memory server
-    if (!mongoMemoryServer) {
-      try {
-        console.log('Falling back to MongoMemoryServer...');
-        mongoMemoryServer = await MongoMemoryServer.create();
-        const fallbackUri = mongoMemoryServer.getUri();
-        await mongoose.connect(fallbackUri);
-        console.log(`Fallback in-memory MongoDB connected: ${fallbackUri}`);
-        return;
-      } catch (fallbackErr) {
-        console.error('Failed to start fallback in-memory MongoDB:', fallbackErr);
-        throw fallbackErr;
-      }
+    if (mongoUri) {
+          try {
+                  console.log('Connecting to provided MONGODB_URI...');
+                  await mongoose.connect(mongoUri);
+                  console.log('MongoDB connected successfully via MONGODB_URI');
+                  return;
+          } catch (error) {
+                  console.error(`MongoDB connection error: ${error.message}`);
+                  if (process.env.NODE_ENV === 'production') {
+                            throw error;
+                  }
+          }
     }
-    throw error;
-  }
+
+    console.log('Initializing MongoMemoryServer for local development and tests...');
+    try {
+          mongoMemoryServer = await MongoMemoryServer.create({
+                  instance: { dbName: 'foodbridge_ai' }
+          });
+          await mongoose.connect(mongoMemoryServer.getUri());
+          console.log('Connected to in-memory MongoDB');
+    } catch (error) {
+          console.error('Failed to start in-memory MongoDB:', error);
+          throw error;
+    }
 };
 
 export const disconnectDB = async () => {
-  try {
-    await mongoose.disconnect();
-    if (mongoMemoryServer) {
-      await mongoMemoryServer.stop();
+    try {
+          await mongoose.disconnect();
+          if (mongoMemoryServer) {
+                  await mongoMemoryServer.stop();
+          }
+          console.log('MongoDB disconnected successfully');
+    } catch (error) {
+          console.error('Error disconnecting MongoDB:', error);
     }
-    console.log('MongoDB disconnected successfully');
-  } catch (error) {
-    console.error('Error disconnecting MongoDB:', error);
-  }
 };
